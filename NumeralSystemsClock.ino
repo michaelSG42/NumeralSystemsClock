@@ -14,12 +14,18 @@ const uint8_t NUM_DIGITS[NUM_DRIVERS] = {6,6,5};
 uint8_t brightness = 1;
 
 /* Fake clock */
-unsigned long seconds;
-float trigger_time;
+uint8_t seconds;
+uint8_t minutes;
+uint8_t hours;
+float trigger_micros;
+
+uint8_t base = 2;
+char representation[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
+                            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
 void setup() {
 
-  /* Start and set up displays. */
+  /* Start and setup displays. */
   for (int i = 0; i < NUM_DRIVERS; i++) {
     /* Wake up: */
     lc.shutdown(i, false);
@@ -30,9 +36,11 @@ void setup() {
   }
 
   /* Setup Clock. */
-  seconds = 49312;
-  trigger_time = micros() + 1000000;
-  
+  seconds = 53;
+  minutes = 45;
+  hours   = 21;
+  trigger_micros = micros() + 1000000;
+
   //Serial.begin(9600);
   //display_test(50);
 
@@ -40,14 +48,26 @@ void setup() {
 
 void loop() {
 
-  if (micros() >= trigger_time) {
-    
-    trigger_time += 1000000.0;
+  if (micros() >= trigger_micros) {
+
+    trigger_micros += 1000000.0;
+
     seconds++;
-    
-    /* Restart at midnight. */
-    if (seconds >= 86400) {
+    if (seconds >= 60) {
+      minutes++;
+      if (minutes >= 60) {
+        hours++;
+        if (hours >= 24) {
+          hours = 0;
+        }
+        minutes = 0;
+      }
       seconds = 0;
+    }
+
+    /* Sometimes a driver seems to get down, even with external 5V 2A. */
+    for (int i = 0; i < NUM_DRIVERS; i++) {
+      lc.shutdown(i, false);
     }
 
     print_clock();
@@ -104,8 +124,6 @@ void binary(int number, int row, int first_digit) {
    *  } */
 
   for (int i = 0; i < NUM_DIGITS[row] - first_digit; i++) {
-    /* Sometimes a driver seems to get down, even with external 5V 2A. */
-    lc.shutdown(row,false);
     lc.setDigit(row, first_digit + i, !!(number & 1<<i), false);
   }
   
@@ -113,13 +131,56 @@ void binary(int number, int row, int first_digit) {
 
 void print_clock() {
 
-  int hours = seconds / 60 / 60;
-  int minutes = seconds / 60 - (hours * 60);
-  int secs = seconds - ((hours * 60 + minutes) * 60);
+  print_digits(seconds, 0, 0, 60);
+  print_digits(minutes, 1, 0, 60);
+  print_digits(hours, 2, 0, 24);
 
-  binary(secs, 0, 0);
+  /*
+  binary(seconds, 0, 0);
   binary(minutes, 1, 0);
   binary(hours, 2, 0);
-  
+  */
+
+}
+
+void print_digits(int number, int row, int first_digit, int maximum) {
+
+  unsigned long power[NUM_DIGITS[row] - first_digit];
+  int digits_max;
+  int digit;
+
+  /* pow() calculates with floats and gives wrong integers, i.e. 3^3 = 26. */
+  power[0] = 1;
+  for (int i = 1; i < NUM_DIGITS[row] - first_digit; i++) {
+    power[i] = power[i - 1] * base;
+  }
+
+  for (int i = NUM_DIGITS[row] - first_digit - 1; i >= 0; i--) {
+    if (maximum > power[i]) {
+      digit = 0;
+      while (number >= power[i]) {
+        digit++;
+        number -= power[i];
+      }
+      if (digit < base) {
+        lc.setChar(row, first_digit + i, digit, false);
+      }
+      else {
+        error(row, first_digit + i);
+        break;
+      }
+    }
+  }
+
+}
+
+void error(int row, int digit) {
+
+  for (int i = 0; i < 8; i++){
+    lc.setLed(row, digit, i, false);
+  }
+
+  lc.setLed(row, digit, 7, true);
+
 }
 
