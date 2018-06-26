@@ -18,18 +18,29 @@ uint8_t seconds;
 uint8_t minutes;
 uint8_t hours;
 float trigger_micros;
+bool second_reached = false;
 
 /* Buttons INPUT_PULLUP */
 const uint8_t BUTTON[3] = {5, 6, 7};
+long button_pressed[3];
 long button_status[3];
+bool button_evaluated[3] = {false, false, false};
 
 /* Numeral systems */
 uint8_t base = 2;
 uint8_t previous_base;
 char representation[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
                             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-const uint8_t SHOW_BASE_SEC = 4;
-int show_base = SHOW_BASE_SEC;
+const uint8_t SHOW_BASE_HALFSECS = 8;
+int show_base = SHOW_BASE_HALFSECS;
+
+/* Clock modes:
+ * 0: clock
+ * 1: set time
+ */
+uint8_t clock_mode = 0;
+uint8_t current_row;
+bool current_on;
 
 void setup() {
 
@@ -65,24 +76,25 @@ void loop() {
 
   if (micros() >= trigger_micros) {
 
-    trigger_micros += 1000000.0;
+    trigger_micros += 500000.0;
 
-    seconds++;
-    if (seconds >= 60) {
-      minutes++;
-      if (minutes >= 60) {
-        hours++;
-        if (hours >= 24) {
-          hours = 0;
+    if (second_reached) {
+      if (clock_mode == 0) {
+        seconds++;
+        if (seconds >= 60) {
+          minutes++;
+          if (minutes >= 60) {
+            hours++;
+            if (hours >= 24) {
+              hours = 0;
+            }
+            minutes = 0;
+          }
+          seconds = 0;
         }
-        minutes = 0;
       }
-      seconds = 0;
     }
-
-    if (show_base > -1) {
-      show_base--;
-    }
+    second_reached = !second_reached;
 
     /* Sometimes a driver seems to get down, even with external 5V 2A.
      * But not needed since two capacitors (10nF and 100nF).
@@ -91,8 +103,22 @@ void loop() {
     lc.shutdown(i, false);
     }*/
 
+    if (show_base > -1) {
+      show_base--;
+    }
+
     print_clock();
-    
+
+    if (clock_mode == 1) {
+      /* If BUTTON[0] and BUTTON[2] not pressed: */
+      if (button_pressed[0] == button_pressed[2]) {
+        if (!current_on) {
+          lc.clearDisplay(current_row);
+        }
+        current_on = !current_on;
+      }
+    }
+
   }
 
 }
@@ -101,34 +127,90 @@ void button_commands() {
 
   for (int i = 0; i < 3; i++) {
     if (digitalRead(BUTTON[i]) == LOW) {
-      button_status[i]++;
+      button_pressed[i]++;
     }
     else {
-      button_status[i] = 0;
+      button_status[i] = button_pressed[i];
+      button_pressed[i] = 0;
+      button_evaluated[i] = false;
     }
   }
 
-  if (button_status[2] > 50) {
-    if (base < 16) {
+  if (button_pressed[2] > 50) {
+    if (clock_mode == 0 && base < 16) {
       base++;
-      show_base = SHOW_BASE_SEC;
+      show_base = SHOW_BASE_HALFSECS;
       print_clock();
+      button_pressed[2] = -15000;
     }
-    button_status[2] = -15000;
+    if (clock_mode == 1) {
+      if (current_row == 2 && hours < 24) {
+        hours++;
+        print_clock();
+      }
+      if (current_row == 1 && minutes < 60) {
+        minutes++;
+        print_clock();
+      }
+      if (current_row == 0 && seconds < 60) {
+        seconds++;
+        print_clock();
+      }
+      button_pressed[2] = -5000;
+    }
   }
 
-  if (button_status[0] > 50) {
-    if (base > 2) {
+  if (button_pressed[0] > 50) {
+    if (clock_mode == 0 && base > 2) {
       base--;
-      show_base = SHOW_BASE_SEC;
+      show_base = SHOW_BASE_HALFSECS;
       print_clock();
+      button_pressed[0] = -15000;
     }
-    button_status[0] = -15000;
+    if (clock_mode == 1) {
+      if (current_row == 2 && hours > 0) {
+        hours--;
+        print_clock();
+      }
+      if (current_row == 1 && minutes > 0) {
+        minutes--;
+        print_clock();
+      }
+      if (current_row == 0 && seconds > 0) {
+        seconds--;
+        print_clock();
+      }
+      button_pressed[0] = -5000;
+    }
   }
 
-  if (button_status[1] > 50) {
-    show_base = SHOW_BASE_SEC;
-    print_clock();
+  if (button_pressed[1] > 30000) {
+    if (!button_evaluated[1]) {
+      if (clock_mode == 0) {
+        clock_mode = 1;
+        current_row = NUM_DRIVERS - 1;
+      }
+      else {
+        clock_mode = 0;
+      }
+      print_clock();
+      button_evaluated[1] = true;
+    }
+  }
+
+  if (button_status[1] > 50 && button_status[1] < 30000) {
+    if (clock_mode == 0) {
+      show_base = SHOW_BASE_HALFSECS;
+      print_clock();
+    }
+    if (clock_mode == 1) {
+      if (current_row == 0) {
+        current_row = NUM_DRIVERS - 1;
+      }
+      else {
+        current_row--;
+      }
+    }
   }
 
 }
@@ -195,8 +277,8 @@ void print_clock() {
     previous_base = base;
   }
 
-  if (show_base > 0) {
-    if (base > 2) {
+  if (base > 2) {
+    if (show_base > 0) {
       if (base < 10) {
         digits = 1;
       }
@@ -205,9 +287,9 @@ void print_clock() {
       }
       print_digits(base, 0, NUM_DIGITS[0] - digits, 16, 10);
     }
-  }
-  else if (show_base == 0) {
-      clear_displays();
+    else if (show_base == 0) {
+      lc.clearDisplay(0);
+    }
   }
 
   print_digits(seconds, 0, 0, 60, base);
