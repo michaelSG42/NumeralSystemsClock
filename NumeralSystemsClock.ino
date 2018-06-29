@@ -137,11 +137,24 @@ void button_commands() {
   }
 
   if (button_pressed[2] > 50) {
-    if (clock_mode == 0 && base < 16) {
-      base++;
-      show_base = SHOW_BASE_HALFSECS;
-      print_clock();
-      button_pressed[2] = -15000;
+    if (button_pressed[1] > 50) {
+      /* Do not interpret as long klick (time setting). */
+      button_evaluated[1] = true;
+      /* Do not interpret as short klick (show numeral base). */
+      button_pressed[1] = 30000;
+      if (brightness < 15) {
+        brightness++;
+        set_brightness();
+        button_pressed[2] = -5000;
+      }
+    }
+    else {
+      if (clock_mode == 0 && base < 16) {
+        base++;
+        show_base = SHOW_BASE_HALFSECS;
+        print_clock();
+        button_pressed[2] = -15000;
+      }
     }
     if (clock_mode == 1) {
       if (current_row == 2 && hours < 24) {
@@ -161,11 +174,24 @@ void button_commands() {
   }
 
   if (button_pressed[0] > 50) {
-    if (clock_mode == 0 && base > 2) {
-      base--;
-      show_base = SHOW_BASE_HALFSECS;
-      print_clock();
-      button_pressed[0] = -15000;
+    if (button_pressed[1] > 50) {
+      /* Do not interpret as long klick (time setting). */
+      button_evaluated[1] = true;
+      /* Do not interpret as short klick (show numeral base). */
+      button_pressed[1] = 30000;
+      if (brightness > 0) {
+        brightness--;
+        set_brightness();
+        button_pressed[0] = -5000;
+      }
+    }
+    else {
+      if (clock_mode == 0 && base > 2) {
+        base--;
+        show_base = SHOW_BASE_HALFSECS;
+        print_clock();
+        button_pressed[0] = -15000;
+      }
     }
     if (clock_mode == 1) {
       if (current_row == 2 && hours > 0) {
@@ -331,6 +357,14 @@ void print_digits(int number, int row, int first_digit, int maximum, int numeral
         break;
       }
     }
+  }
+
+}
+
+void set_brightness() {
+
+  for (int i = 0; i < NUM_DRIVERS; i++) {
+    lc.setIntensity(i, brightness);
   }
 
 }
