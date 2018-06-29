@@ -1,6 +1,10 @@
 /* Clock for several numeral systems, inspired by the new binary clock at SBB rail station St.Gallen, Switzerland. */
 
-/*  Initialize LedControl/MAX7219. */
+/* Initialize DS1307 V1.4 Real Time Clock. */
+#include <Wire.h>
+#define DS1307_I2C 0x68
+
+/* Initialize LedControl/MAX7219. */
 #include <LedControl.h>
 #define PIN_DIN  12
 #define PIN_CLK  11
@@ -44,6 +48,8 @@ bool current_on;
 
 void setup() {
 
+  //Serial.begin(9600);
+
   /* Start and setup displays. */
   for (int i = 0; i < NUM_DRIVERS; i++) {
     /* Wake up: */
@@ -55,9 +61,8 @@ void setup() {
   }
 
   /* Setup clock. */
-  seconds = 53;
-  minutes = 45;
-  hours   = 21;
+  Wire.begin();
+  read_rtc();
   trigger_micros = micros() + 1000000;
 
   /* Setup buttons. */
@@ -65,7 +70,6 @@ void setup() {
     pinMode(BUTTON[i], INPUT_PULLUP);
   }
 
-  //Serial.begin(9600);
   //display_test(50);
 
 }
@@ -137,23 +141,25 @@ void button_commands() {
   }
 
   if (button_pressed[2] > 50) {
-    if (button_pressed[1] > 50) {
-      /* Do not interpret as long klick (time setting). */
-      button_evaluated[1] = true;
-      /* Do not interpret as short klick (show numeral base). */
-      button_pressed[1] = 30000;
-      if (brightness < 15) {
-        brightness++;
-        set_brightness();
-        button_pressed[2] = -5000;
+    if (clock_mode == 0) {
+      if (button_pressed[1] > 50) {
+        /* Do not interpret as long klick (time setting). */
+        button_evaluated[1] = true;
+        /* Do not interpret as short klick (show numeral base). */
+        button_pressed[1] = 30000;
+        if (brightness < 15) {
+          brightness++;
+          set_brightness();
+          button_pressed[2] = -5000;
+        }
       }
-    }
-    else {
-      if (clock_mode == 0 && base < 16) {
-        base++;
-        show_base = SHOW_BASE_HALFSECS;
-        print_clock();
-        button_pressed[2] = -15000;
+      else {
+        if (base < 16) {
+          base++;
+          show_base = SHOW_BASE_HALFSECS;
+          print_clock();
+          button_pressed[2] = -15000;
+        }
       }
     }
     if (clock_mode == 1) {
@@ -174,25 +180,28 @@ void button_commands() {
   }
 
   if (button_pressed[0] > 50) {
-    if (button_pressed[1] > 50) {
-      /* Do not interpret as long klick (time setting). */
-      button_evaluated[1] = true;
-      /* Do not interpret as short klick (show numeral base). */
-      button_pressed[1] = 30000;
-      if (brightness > 0) {
-        brightness--;
-        set_brightness();
-        button_pressed[0] = -5000;
+    if (clock_mode == 0) {
+      if (button_pressed[1] > 50) {
+        /* Do not interpret as long klick (time setting). */
+        button_evaluated[1] = true;
+        /* Do not interpret as short klick (show numeral base). */
+        button_pressed[1] = 30000;
+        if (brightness > 0) {
+          brightness--;
+          set_brightness();
+          button_pressed[0] = -5000;
+        }
+      }
+      else {
+        if (base > 2) {
+          base--;
+          show_base = SHOW_BASE_HALFSECS;
+          print_clock();
+          button_pressed[0] = -15000;
+        }
       }
     }
-    else {
-      if (clock_mode == 0 && base > 2) {
-        base--;
-        show_base = SHOW_BASE_HALFSECS;
-        print_clock();
-        button_pressed[0] = -15000;
-      }
-    }
+
     if (clock_mode == 1) {
       if (current_row == 2 && hours > 0) {
         hours--;
@@ -218,6 +227,7 @@ void button_commands() {
       }
       else {
         clock_mode = 0;
+        write_rtc();
       }
       print_clock();
       button_evaluated[1] = true;
@@ -387,3 +397,41 @@ void clear_displays() {
 
 }
 
+void read_rtc() {
+
+  byte b_seconds;
+  byte b_minutes;
+  byte b_hours;
+
+  Wire.beginTransmission(DS1307_I2C);
+  Wire.write((byte)0x00);
+  Wire.endTransmission();
+  Wire.requestFrom(DS1307_I2C, 3);
+  b_seconds = Wire.read();
+  b_minutes = Wire.read();
+  b_hours = Wire.read();
+
+  seconds = (b_seconds/16*10) + (b_seconds%16) & 0x7f;
+  minutes = (b_minutes/16*10) + (b_minutes%16);
+  hours = (b_hours/16*10) + (b_hours%16) & 0x3f;
+
+}
+
+void write_rtc() {
+
+  byte b_seconds;
+  byte b_minutes;
+  byte b_hours;
+
+  b_seconds = (seconds/10*16) + (seconds%10) & 0x7f;
+  b_minutes = (minutes/10*16) + (minutes%10);
+  b_hours = (hours/10*16) + (hours%10) & 0x3f;
+
+  Wire.beginTransmission(DS1307_I2C);
+  Wire.write((byte)0x00);
+  Wire.write(b_seconds);
+  Wire.write(b_minutes);
+  Wire.write(b_hours);
+  Wire.endTransmission();
+
+}
