@@ -22,12 +22,19 @@ uint8_t seconds;
 uint8_t minutes;
 uint8_t hours;
 float trigger_micros;
-bool second_reached = false;
+uint8_t second_reached;
+uint8_t decisecond_reached;
+uint8_t stop_centiseconds;
+uint8_t stop_deciseconds;
+uint8_t stop_seconds;
+uint8_t stop_minutes;
 
 /* Buttons INPUT_PULLUP */
 const uint8_t BUTTON[3] = {5, 6, 7};
 long button_pressed[3];
 long button_status[3];
+float last_pressed_time[3];
+float pre_last_pressed_time[3];
 bool button_evaluated[3] = {false, false, false};
 
 /* Numeral systems */
@@ -35,14 +42,16 @@ uint8_t base = 2;
 uint8_t previous_base;
 char representation[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
                             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-const uint8_t SHOW_BASE_HALFSECS = 8;
-int show_base = SHOW_BASE_HALFSECS;
+const uint8_t SHOW_BASE_SECS = 4;
+int show_base = SHOW_BASE_SECS;
 
 /* Clock modes:
  * 0: clock
  * 1: set time
+ * 2: stopwatch
  */
 uint8_t clock_mode = 0;
+uint8_t previous_clock_mode;
 uint8_t current_row;
 bool current_on;
 
@@ -80,10 +89,13 @@ void loop() {
 
   if (micros() >= trigger_micros) {
 
-    trigger_micros += 500000.0;
+    trigger_micros += 10000.0;
 
-    if (second_reached) {
-      if (clock_mode == 0) {
+    second_reached++;
+    decisecond_reached++;
+
+    if (second_reached >= 100) {
+      if (clock_mode != 1) {
         seconds++;
         if (seconds >= 60) {
           minutes++;
@@ -97,8 +109,14 @@ void loop() {
           seconds = 0;
         }
       }
+      if (show_base > -1) {
+        show_base--;
+      }
+      second_reached = 0;
+      if (clock_mode == 0) {
+        print_clock(seconds, minutes, hours);
+      }
     }
-    second_reached = !second_reached;
 
     /* Sometimes a driver seems to get down, even with external 5V 2A.
      * But not needed since two capacitors (10nF and 100nF).
@@ -107,19 +125,44 @@ void loop() {
     lc.shutdown(i, false);
     }*/
 
-    if (show_base > -1) {
-      show_base--;
+    if (clock_mode == 1) {
+      if (second_reached == 50 || second_reached == 0) {
+        print_clock(seconds, minutes, hours);
+        /* If BUTTON[0] and BUTTON[2] not pressed: */
+        if (button_pressed[0] == button_pressed[2]) {
+          if (!current_on) {
+            lc.clearDisplay(current_row);
+          }
+          current_on = !current_on;
+        }
+      }
     }
 
-    print_clock();
-
-    if (clock_mode == 1) {
-      /* If BUTTON[0] and BUTTON[2] not pressed: */
-      if (button_pressed[0] == button_pressed[2]) {
-        if (!current_on) {
-          lc.clearDisplay(current_row);
+    if (clock_mode == 2) {
+      stop_centiseconds++;
+      if (stop_centiseconds >= 100) {
+        stop_seconds++;
+        if (stop_seconds >= 60) {
+          stop_minutes++;
+          if (stop_minutes >= 60) {
+            stop_minutes = 0;
+          }
+          stop_seconds = 0;
         }
-        current_on = !current_on;
+        stop_centiseconds = 0;
+      }
+      if (base > 4) {
+        print_clock(stop_centiseconds, stop_seconds, stop_minutes);
+      }
+      else {
+        if (decisecond_reached >= 10) {
+          stop_deciseconds++;
+          if (stop_deciseconds >= 10) {
+            stop_deciseconds = 0;
+          }
+          print_clock(stop_deciseconds, stop_seconds, stop_minutes);
+          decisecond_reached = 0;
+        }
       }
     }
 
@@ -137,11 +180,15 @@ void button_commands() {
       button_status[i] = button_pressed[i];
       button_pressed[i] = 0;
       button_evaluated[i] = false;
+      if (button_status[i] > 50) {
+        pre_last_pressed_time[i] = last_pressed_time[i];
+        last_pressed_time[i] = micros();
+      }
     }
   }
 
   if (button_pressed[2] > 50) {
-    if (clock_mode == 0) {
+    if (clock_mode == 0 || clock_mode == 2) {
       if (button_pressed[1] > 50) {
         /* Do not interpret as long klick (time setting). */
         button_evaluated[1] = true;
@@ -156,31 +203,31 @@ void button_commands() {
       else {
         if (base < 16) {
           base++;
-          show_base = SHOW_BASE_HALFSECS;
-          print_clock();
-          button_pressed[2] = -15000;
+          show_base = SHOW_BASE_SECS;
+          print_clock(seconds, minutes, hours);
+          button_pressed[2] = -11000;
         }
       }
     }
     if (clock_mode == 1) {
       if (current_row == 2 && hours < 24) {
         hours++;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       if (current_row == 1 && minutes < 60) {
         minutes++;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       if (current_row == 0 && seconds < 60) {
         seconds++;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       button_pressed[2] = -5000;
     }
   }
 
   if (button_pressed[0] > 50) {
-    if (clock_mode == 0) {
+    if (clock_mode == 0 || clock_mode == 2) {
       if (button_pressed[1] > 50) {
         /* Do not interpret as long klick (time setting). */
         button_evaluated[1] = true;
@@ -195,9 +242,9 @@ void button_commands() {
       else {
         if (base > 2) {
           base--;
-          show_base = SHOW_BASE_HALFSECS;
-          print_clock();
-          button_pressed[0] = -15000;
+          show_base = SHOW_BASE_SECS;
+          print_clock(seconds, minutes, hours);
+          button_pressed[0] = -11000;
         }
       }
     }
@@ -205,15 +252,15 @@ void button_commands() {
     if (clock_mode == 1) {
       if (current_row == 2 && hours > 0) {
         hours--;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       if (current_row == 1 && minutes > 0) {
         minutes--;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       if (current_row == 0 && seconds > 0) {
         seconds--;
-        print_clock();
+        print_clock(seconds, minutes, hours);
       }
       button_pressed[0] = -5000;
     }
@@ -229,22 +276,32 @@ void button_commands() {
         clock_mode = 0;
         write_rtc();
       }
-      print_clock();
+      print_clock(seconds, minutes, hours);
       button_evaluated[1] = true;
     }
   }
 
   if (button_status[1] > 50 && button_status[1] < 30000) {
-    if (clock_mode == 0) {
-      show_base = SHOW_BASE_HALFSECS;
-      print_clock();
-    }
-    if (clock_mode == 1) {
-      if (current_row == 0) {
-        current_row = NUM_DRIVERS - 1;
+    if (last_pressed_time[1] - pre_last_pressed_time[1] < 500000.0) {
+      if (clock_mode == 0) {
+        clock_mode = 2;
       }
-      else {
-        current_row--;
+      else if (clock_mode == 2) {
+        clock_mode = 0;
+      }
+    }
+    else {
+      if (clock_mode == 0) {
+        show_base = SHOW_BASE_SECS;
+        print_clock(seconds, minutes, hours);
+      }
+      if (clock_mode == 1) {
+        if (current_row == 0) {
+          current_row = NUM_DRIVERS - 1;
+        }
+        else {
+          current_row--;
+        }
       }
     }
   }
@@ -304,13 +361,18 @@ void binary(int number, int row, int first_digit) {
   
 }
 
-void print_clock() {
+void print_clock(uint8_t bottom, uint8_t middle, uint8_t top) {
 
   int digits;
 
   if (base != previous_base) {
     clear_displays();
     previous_base = base;
+  }
+
+  if (clock_mode != previous_clock_mode) {
+    clear_displays();
+    previous_clock_mode = clock_mode;
   }
 
   if (base > 2) {
@@ -328,9 +390,21 @@ void print_clock() {
     }
   }
 
-  print_digits(seconds, 0, 0, 60, base);
-  print_digits(minutes, 1, 0, 60, base);
-  print_digits(hours, 2, 0, 24, base);
+  if (clock_mode == 0 || clock_mode == 1) {
+    print_digits(bottom, 0, 0, 60, base);
+    print_digits(middle, 1, 0, 60, base);
+    print_digits(top, 2, 0, 24, base);
+  }
+  if (clock_mode == 2) {
+    if (base > 4) {
+      print_digits(bottom, 0, 0, 100, base);
+    }
+    else {
+      print_digits(bottom, 0, 0, 10, base);
+    }
+    print_digits(middle, 1, 0, 60, base);
+    print_digits(top, 2, 0, 60, base);
+  }
 
   /*
   binary(seconds, 0, 0);
