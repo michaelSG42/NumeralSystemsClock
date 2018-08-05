@@ -2,7 +2,20 @@
 
 /* Initialize DS1307 V1.4 Real Time Clock. */
 #include <Wire.h>
+#include <DS1307RTC.h>
 #define DS1307_I2C 0x68
+
+/* Soft clock */
+#include <TimeLib.h>
+#include <Time.h>
+uint8_t lastSecond;
+uint8_t setSecond;
+uint8_t setMinute;
+uint8_t setHour;
+uint8_t stopCenti;
+uint8_t stopDeci;
+unsigned long lastEventMillis;
+unsigned long startStopClock;
 
 /* Initialize LedControl/MAX7219. */
 #include <LedControl.h>
@@ -10,24 +23,11 @@
 #define PIN_CLK  11
 #define PIN_LOAD 10  
 const uint8_t NUM_DRIVERS = 3;
-
 LedControl lc=LedControl(PIN_DIN, PIN_CLK, PIN_LOAD, NUM_DRIVERS);
 
 /* Seven-Segment Displays */
 const uint8_t NUM_DIGITS[NUM_DRIVERS] = {6, 6, 5};
 uint8_t brightness = 1;
-
-/* Fake clock */
-uint8_t seconds;
-uint8_t minutes;
-uint8_t hours;
-float trigger_micros;
-uint8_t second_reached;
-uint8_t decisecond_reached;
-uint8_t stop_centiseconds;
-uint8_t stop_deciseconds;
-uint8_t stop_seconds;
-uint8_t stop_minutes;
 
 /* Buttons INPUT_PULLUP */
 const uint8_t BUTTON[3] = {5, 6, 7};
@@ -53,7 +53,6 @@ int show_base = SHOW_BASE_SECS;
 uint8_t clock_mode = 0;
 uint8_t previous_clock_mode;
 uint8_t current_row;
-bool current_on;
 
 void setup() {
 
@@ -70,9 +69,8 @@ void setup() {
   }
 
   /* Setup clock. */
-  Wire.begin();
-  read_rtc();
-  trigger_micros = micros() + 1000000;
+  //Wire.begin();
+  readRTC();
 
   /* Setup buttons. */
   for (int i = 0; i < 3; i++) {
@@ -87,86 +85,56 @@ void loop() {
 
   button_commands();
 
-  if (micros() >= trigger_micros) {
+  if (second() != lastSecond) {
 
-    trigger_micros += 10000.0;
+    lastSecond = second();
 
-    second_reached++;
-    decisecond_reached++;
-
-    if (second_reached >= 100) {
-      if (clock_mode != 1) {
-        seconds++;
-        if (seconds >= 60) {
-          minutes++;
-          if (minutes >= 60) {
-            hours++;
-            if (hours >= 24) {
-              hours = 0;
-            }
-            minutes = 0;
-          }
-          seconds = 0;
-        }
-      }
-      if (show_base > -1) {
-        show_base--;
-      }
-      second_reached = 0;
-      if (clock_mode == 0) {
-        print_clock(seconds, minutes, hours);
-      }
+    if (show_base > -1) {
+      show_base--;
     }
 
-    /* Sometimes a driver seems to get down, even with external 5V 2A.
-     * But not needed since two capacitors (10nF and 100nF).
-
-    for (int i = 0; i < NUM_DRIVERS; i++) {
-    lc.shutdown(i, false);
-    }*/
+    if (clock_mode == 0) {
+      print_clock(second(), minute(), hour());
+    }
 
     if (clock_mode == 1) {
-      if (second_reached == 50 || second_reached == 0) {
-        print_clock(seconds, minutes, hours);
-        /* If BUTTON[0] and BUTTON[2] not pressed: */
-        if (button_pressed[0] == button_pressed[2]) {
-          if (!current_on) {
-            lc.clearDisplay(current_row);
-          }
-          current_on = !current_on;
-        }
-      }
+      lastEventMillis = millis();
+      print_clock(setSecond, setMinute, setHour);
     }
 
-    if (clock_mode == 2) {
-      stop_centiseconds++;
-      if (stop_centiseconds >= 100) {
-        stop_seconds++;
-        if (stop_seconds >= 60) {
-          stop_minutes++;
-          if (stop_minutes >= 60) {
-            stop_minutes = 0;
-          }
-          stop_seconds = 0;
-        }
-        stop_centiseconds = 0;
+  }
+
+  if (clock_mode == 1 && (millis() - lastEventMillis) >= 500) {
+    /* If BUTTON[0] and BUTTON[2] not pressed: */
+    if (button_pressed[0] == button_pressed[2]) {
+      lc.clearDisplay(current_row);
+    }
+  }
+
+  if (clock_mode == 2) {
+
+    if (base > 4 && (millis() - lastEventMillis) >= 10) {
+      lastEventMillis = millis();
+      stopCenti++;
+      if (stopCenti >= 100 || second(now() - startStopClock) == 0) {
+        stopCenti = 0;
       }
-      if (base > 4) {
-        print_clock(stop_centiseconds, stop_seconds, stop_minutes);
-      }
-      else {
-        if (decisecond_reached >= 10) {
-          stop_deciseconds++;
-          if (stop_deciseconds >= 10) {
-            stop_deciseconds = 0;
-          }
-          print_clock(stop_deciseconds, stop_seconds, stop_minutes);
-          decisecond_reached = 0;
+      print_clock(stopCenti, second(now() - startStopClock), minute(now() - startStopClock));
+    }
+
+    else {
+      if ((millis() - lastEventMillis) >= 100) {
+        lastEventMillis = millis();
+        stopDeci++;
+        if (stopDeci >= 10 || second(now() - startStopClock) == 0) {
+          stopDeci = 0;
         }
+        print_clock(stopDeci, second(now() - startStopClock), minute(now() - startStopClock));
       }
     }
 
   }
+
 
 }
 
@@ -204,23 +172,23 @@ void button_commands() {
         if (base < 16) {
           base++;
           show_base = SHOW_BASE_SECS;
-          print_clock(seconds, minutes, hours);
+          print_clock(second(), minute(), hour());
           button_pressed[2] = -11000;
         }
       }
     }
     if (clock_mode == 1) {
-      if (current_row == 2 && hours < 24) {
-        hours++;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 2 && setHour < 24) {
+        setHour++;
+        print_clock(setSecond, setMinute, setHour);
       }
-      if (current_row == 1 && minutes < 60) {
-        minutes++;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 1 && setMinute < 60) {
+        setMinute++;
+        print_clock(setSecond, setMinute, setHour);
       }
-      if (current_row == 0 && seconds < 60) {
-        seconds++;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 0 && setSecond < 60) {
+        setSecond++;
+        print_clock(setSecond, setMinute, setHour);
       }
       button_pressed[2] = -5000;
     }
@@ -243,24 +211,24 @@ void button_commands() {
         if (base > 2) {
           base--;
           show_base = SHOW_BASE_SECS;
-          print_clock(seconds, minutes, hours);
+          print_clock(second(), minute(), hour());
           button_pressed[0] = -11000;
         }
       }
     }
 
     if (clock_mode == 1) {
-      if (current_row == 2 && hours > 0) {
-        hours--;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 2 && setHour > 0) {
+        setHour--;
+        print_clock(setSecond, setMinute, setHour);
       }
-      if (current_row == 1 && minutes > 0) {
-        minutes--;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 1 && setMinute > 0) {
+        setMinute--;
+        print_clock(setSecond, setMinute, setHour);
       }
-      if (current_row == 0 && seconds > 0) {
-        seconds--;
-        print_clock(seconds, minutes, hours);
+      if (current_row == 0 && setSecond > 0) {
+        setSecond--;
+        print_clock(setSecond, setMinute, setHour);
       }
       button_pressed[0] = -5000;
     }
@@ -271,12 +239,16 @@ void button_commands() {
       if (clock_mode == 0) {
         clock_mode = 1;
         current_row = NUM_DRIVERS - 1;
+        setSecond = second();
+        setMinute = minute();
+        setHour = hour();
       }
       else {
         clock_mode = 0;
-        write_rtc();
+        writeRTC();
+        readRTC();
       }
-      print_clock(seconds, minutes, hours);
+      print_clock(setSecond, setMinute, setHour);
       button_evaluated[1] = true;
     }
   }
@@ -284,6 +256,9 @@ void button_commands() {
   if (button_status[1] > 50 && button_status[1] < 30000) {
     if (last_pressed_time[1] - pre_last_pressed_time[1] < 500000.0) {
       if (clock_mode == 0) {
+        startStopClock = now();
+        stopDeci = 0;
+        stopCenti = 0;
         clock_mode = 2;
       }
       else if (clock_mode == 2) {
@@ -293,7 +268,7 @@ void button_commands() {
     else {
       if (clock_mode == 0) {
         show_base = SHOW_BASE_SECS;
-        print_clock(seconds, minutes, hours);
+        print_clock(second(), minute(), hour());
       }
       if (clock_mode == 1) {
         if (current_row == 0) {
@@ -471,8 +446,11 @@ void clear_displays() {
 
 }
 
-void read_rtc() {
+void readRTC() {
 
+  setSyncProvider(RTC.get);
+
+  /*
   byte b_seconds;
   byte b_minutes;
   byte b_hours;
@@ -488,24 +466,25 @@ void read_rtc() {
   seconds = (b_seconds/16*10) + (b_seconds%16) & 0x7f;
   minutes = (b_minutes/16*10) + (b_minutes%16);
   hours = (b_hours/16*10) + (b_hours%16) & 0x3f;
+  */
 
 }
 
-void write_rtc() {
+void writeRTC() {
 
-  byte b_seconds;
-  byte b_minutes;
-  byte b_hours;
+  byte b_second;
+  byte b_minute;
+  byte b_hour;
 
-  b_seconds = (seconds/10*16) + (seconds%10) & 0x7f;
-  b_minutes = (minutes/10*16) + (minutes%10);
-  b_hours = (hours/10*16) + (hours%10) & 0x3f;
+  b_second = (setSecond/10*16) + (setSecond%10) & 0x7f;
+  b_minute = (setMinute/10*16) + (setMinute%10);
+  b_hour = (setHour/10*16) + (setHour%10) & 0x3f;
 
   Wire.beginTransmission(DS1307_I2C);
   Wire.write((byte)0x00);
-  Wire.write(b_seconds);
-  Wire.write(b_minutes);
-  Wire.write(b_hours);
+  Wire.write(b_second);
+  Wire.write(b_minute);
+  Wire.write(b_hour);
   Wire.endTransmission();
 
 }
