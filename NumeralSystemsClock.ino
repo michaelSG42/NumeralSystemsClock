@@ -12,10 +12,14 @@ uint8_t lastSecond;
 uint8_t setSecond;
 uint8_t setMinute;
 uint8_t setHour;
+uint8_t stopTime;
 uint8_t stopCenti;
 uint8_t stopDeci;
+/* Numeral base to start with centiseconds: */
+const uint8_t STOP_BASE_CENTI = 5;
 unsigned long lastEventMillis;
 unsigned long startStopClock;
+bool isChanged;
 
 /* Initialize LedControl/MAX7219. */
 #include <LedControl.h>
@@ -40,8 +44,8 @@ bool button_evaluated[3] = {false, false, false};
 /* Numeral systems */
 uint8_t base = 2;
 uint8_t previous_base;
-char representation[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
-                            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+const char REPRESENTATION[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
+                                  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 const uint8_t SHOW_BASE_SECS = 4;
 int show_base = SHOW_BASE_SECS;
 
@@ -87,17 +91,17 @@ void loop() {
 
   if (second() != lastSecond) {
 
-    lastSecond = second();
-
     if (show_base > -1) {
       show_base--;
     }
 
     if (clock_mode == 0) {
+      lastSecond = second();
       print_clock(second(), minute(), hour());
     }
 
     if (clock_mode == 1) {
+      lastSecond = second();
       lastEventMillis = millis();
       print_clock(setSecond, setMinute, setHour);
     }
@@ -105,6 +109,7 @@ void loop() {
   }
 
   if (clock_mode == 1 && (millis() - lastEventMillis) >= 500) {
+    lastEventMillis = millis();
     /* If BUTTON[0] and BUTTON[2] not pressed: */
     if (button_pressed[0] == button_pressed[2]) {
       lc.clearDisplay(current_row);
@@ -113,28 +118,36 @@ void loop() {
 
   if (clock_mode == 2) {
 
-    if (base > 4 && (millis() - lastEventMillis) >= 10) {
-      lastEventMillis = millis();
-      stopCenti++;
-      if (stopCenti >= 100 || second(now() - startStopClock) == 0) {
-        stopCenti = 0;
-      }
-      print_clock(stopCenti, second(now() - startStopClock), minute(now() - startStopClock));
+    stopTime = now() - startStopClock;
+
+    if (lastSecond != second(stopTime)) {
+      lastSecond = second(stopTime);
+      stopCenti = 0;
+      stopDeci = 0;
+      isChanged = true;
     }
 
-    else {
-      if ((millis() - lastEventMillis) >= 100) {
-        lastEventMillis = millis();
-        stopDeci++;
-        if (stopDeci >= 10 || second(now() - startStopClock) == 0) {
-          stopDeci = 0;
+    if (millis() - lastEventMillis >= 10) {
+      while (millis() - lastEventMillis >= 10) {
+        lastEventMillis += 10;
+        if (stopCenti < 99) {
+          stopCenti++;
         }
-        print_clock(stopDeci, second(now() - startStopClock), minute(now() - startStopClock));
+      }
+      if (stopDeci != stopCenti / 10) {
+        stopDeci = stopCenti / 10;
+        isChanged = true;
+      }
+      if (base >= STOP_BASE_CENTI) {
+        print_clock(stopCenti, second(stopTime), minute(stopTime));
+      }
+      else if (isChanged) {
+        isChanged = false;
+        print_clock(stopDeci, second(stopTime), minute(stopTime));
       }
     }
 
   }
-
 
 }
 
@@ -366,19 +379,19 @@ void print_clock(uint8_t bottom, uint8_t middle, uint8_t top) {
   }
 
   if (clock_mode == 0 || clock_mode == 1) {
-    print_digits(bottom, 0, 0, 60, base);
-    print_digits(middle, 1, 0, 60, base);
-    print_digits(top, 2, 0, 24, base);
+    print_digits(bottom, 0, 0, 59, base);
+    print_digits(middle, 1, 0, 59, base);
+    print_digits(top, 2, 0, 23, base);
   }
   if (clock_mode == 2) {
-    if (base > 4) {
-      print_digits(bottom, 0, 0, 100, base);
+    if (base >= STOP_BASE_CENTI) {
+      print_digits(bottom, 0, 0, 99, base);
     }
     else {
-      print_digits(bottom, 0, 0, 10, base);
+      print_digits(bottom, 0, 0, 9, base);
     }
-    print_digits(middle, 1, 0, 60, base);
-    print_digits(top, 2, 0, 60, base);
+    print_digits(middle, 1, 0, 59, base);
+    print_digits(top, 2, 0, 59, base);
   }
 
   /*
@@ -449,24 +462,6 @@ void clear_displays() {
 void readRTC() {
 
   setSyncProvider(RTC.get);
-
-  /*
-  byte b_seconds;
-  byte b_minutes;
-  byte b_hours;
-
-  Wire.beginTransmission(DS1307_I2C);
-  Wire.write((byte)0x00);
-  Wire.endTransmission();
-  Wire.requestFrom(DS1307_I2C, 3);
-  b_seconds = Wire.read();
-  b_minutes = Wire.read();
-  b_hours = Wire.read();
-
-  seconds = (b_seconds/16*10) + (b_seconds%16) & 0x7f;
-  minutes = (b_minutes/16*10) + (b_minutes%16);
-  hours = (b_hours/16*10) + (b_hours%16) & 0x3f;
-  */
 
 }
 
