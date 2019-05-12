@@ -15,22 +15,22 @@ uint8_t setHour;
 uint8_t stopCenti;
 uint8_t stopDeci;
 uint8_t stoppedTime;
-const uint8_t STOP_BASE_CENTI = 5; /* Numeral base to start with centiseconds: */
 unsigned long lastEventMillis;
 unsigned long startStopClock;
 bool stopClockRunning;
 bool isChanged;
+const uint8_t STOP_BASE_CENTI = 5; /* Numeral base to start with centiseconds: */
 
 /* Initialize LedControl/MAX7219. */
 #include <LedControl.h>
 #define PIN_DIN  12
 #define PIN_CLK  11
 #define PIN_LOAD 10  
-const uint8_t NUM_DRIVERS = 3;
-LedControl lc=LedControl(PIN_DIN, PIN_CLK, PIN_LOAD, NUM_DRIVERS);
+const uint8_t DRIVERS = 3;
+LedControl lc=LedControl(PIN_DIN, PIN_CLK, PIN_LOAD, DRIVERS);
 
 /* Seven-Segment Displays */
-const uint8_t NUM_DIGITS[NUM_DRIVERS] = {6, 6, 5};
+const uint8_t DIGITS[DRIVERS] = {6, 6, 5};
 uint8_t brightness = 1;
 
 /* Buttons INPUT_PULLUP */
@@ -39,17 +39,17 @@ bool buttonLastStatus[3];
 bool buttonIsPressed[3];
 bool buttonIsHold[3];
 bool buttonEvaluated[3];
-uint8_t buttonClicks[3];
 uint8_t buttonIsClicked[3];
+uint8_t buttonClicks[3];
 unsigned long buttonMillis[3];
 
 /* Numeral systems */
 uint8_t base = 2;
 uint8_t preBase;
-const char REPRESENTATION[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
-                                  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 const uint8_t SHOW_BASE_SECS = 4;
 int showBase = SHOW_BASE_SECS;
+const char REPRESENTATION[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
+                                  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
 /* Clock modes:
  * 0: clock
@@ -65,7 +65,7 @@ void setup() {
   //Serial.begin(9600);
 
   /* Start and setup displays. */
-  for (int i = 0; i < NUM_DRIVERS; i++) {
+  for (int i = 0; i < DRIVERS; i++) {
     /* Wake up: */
     lc.shutdown(i, false);
     /* Brightness: */
@@ -119,11 +119,9 @@ void loop() {
   }
 
   if (clockMode == 2 && stopClockRunning) {
-
     if (millis() - lastEventMillis >= 10) {
       giveStopClock(now() - startStopClock, true);
     }
-
   }
 
 }
@@ -162,12 +160,11 @@ void readButtons() {
         /* Double clicks only for middle button: */
         if (i == 1) {
           buttonClicks[i]++;
-          buttonIsPressed[i] = false;
         }
         else {
           buttonIsClicked[i] = 1;
-          buttonIsPressed[i] = false;
         }
+        buttonIsPressed[i] = false;
       }
 
       if (buttonClicks[i] > 0 && (millis() - buttonMillis[i] >= 100)) {
@@ -209,6 +206,7 @@ void buttonActions() {
           changeSetTime(i);
           printClock(setSecond, setMinute, setHour);
         }
+        
         else {
           changeBase(i);
           showBase = SHOW_BASE_SECS;
@@ -246,7 +244,7 @@ void buttonActions() {
 
     if (clockMode == 1) {
       if (currentRow == 0) {
-        currentRow = NUM_DRIVERS - 1;
+        currentRow = DRIVERS - 1;
       }
       else {
         currentRow--;
@@ -302,7 +300,7 @@ void buttonActions() {
 
     if (clockMode == 0) {
       clockMode = 1;
-      currentRow = NUM_DRIVERS - 1;
+      currentRow = DRIVERS - 1;
       setSecond = second();
       setMinute = minute();
       setHour = hour();
@@ -325,8 +323,8 @@ void displayTest(int blinkDelay) {
 
   clearDisplays();
 
-  for (int i = 0; i < NUM_DRIVERS; i++) {
-    for (int j = 0; j < NUM_DIGITS[i]; j++) {
+  for (int i = 0; i < DRIVERS; i++) {
+    for (int j = 0; j < DIGITS[i]; j++) {
       for (int k = 0; k < 2; k++) {
         for (int l = 0; l < 8; l++) {
           lc.setLed(i, j, l, m);
@@ -339,8 +337,8 @@ void displayTest(int blinkDelay) {
 
   for (int l = 0; l < 8; l++){
     for (int k = 0; k < 2; k++) {
-      for (int i = 0; i < NUM_DRIVERS; i++) {
-        for (int j = 0; j < NUM_DIGITS[i]; j++) {
+      for (int i = 0; i < DRIVERS; i++) {
+        for (int j = 0; j < DIGITS[i]; j++) {
           lc.setLed(i, j, l, m);
           delay(blinkDelay);
         }  
@@ -366,7 +364,7 @@ void binary(int number, int row, int firstDigit) {
    *    }
    *  } */
 
-  for (int i = 0; i < NUM_DIGITS[row] - firstDigit; i++) {
+  for (int i = 0; i < DIGITS[row] - firstDigit; i++) {
     lc.setDigit(row, firstDigit + i, !!(number & 1<<i), false);
   }
 
@@ -394,7 +392,7 @@ void printClock(uint8_t bottom, uint8_t middle, uint8_t top) {
       else {
         digits = 2;
       }
-      printDigits(base, 0, NUM_DIGITS[0] - digits, 16, 10);
+      printDigits(base, 0, DIGITS[0] - digits, 16, 10);
     }
     else if (showBase == 0) {
       lc.clearDisplay(0);
@@ -406,6 +404,7 @@ void printClock(uint8_t bottom, uint8_t middle, uint8_t top) {
     printDigits(middle, 1, 0, 59, base);
     printDigits(top, 2, 0, 23, base);
   }
+
   if (clockMode == 2) {
     if (base >= STOP_BASE_CENTI) {
       printDigits(bottom, 0, 0, 99, base);
@@ -421,16 +420,16 @@ void printClock(uint8_t bottom, uint8_t middle, uint8_t top) {
 
 void printDigits(int number, int row, int firstDigit, int maximum, int numeralBase) {
 
-  unsigned long power[NUM_DIGITS[row] - firstDigit];
+  unsigned long power[DIGITS[row] - firstDigit];
   int digit;
 
   /* pow() calculates with floats and gives wrong integers, i.e. 3^3 = 26. */
   power[0] = 1;
-  for (int i = 1; i < NUM_DIGITS[row] - firstDigit; i++) {
+  for (int i = 1; i < DIGITS[row] - firstDigit; i++) {
     power[i] = power[i - 1] * numeralBase;
   }
 
-  for (int i = NUM_DIGITS[row] - firstDigit - 1; i >= 0; i--) {
+  for (int i = DIGITS[row] - firstDigit - 1; i >= 0; i--) {
     if (maximum > power[i]) {
       digit = 0;
       while (number >= power[i]) {
@@ -502,7 +501,7 @@ void changeBright(int upDown) {
 
 void setBright() {
 
-  for (int i = 0; i < NUM_DRIVERS; i++) {
+  for (int i = 0; i < DRIVERS; i++) {
     lc.setIntensity(i, brightness);
   }
 
@@ -568,7 +567,7 @@ void error(int row, int digit) {
 
 void clearDisplays() {
 
-  for (int i = 0; i < NUM_DRIVERS; i++) {
+  for (int i = 0; i < DRIVERS; i++) {
    lc.clearDisplay(i);
   }
 
