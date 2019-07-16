@@ -513,12 +513,20 @@ void changeBase(int upDown) {
    * 2: right button = up
    */
 
-  if (upDown == 0 && base > 2) {
+  if (upDown == 0) {
     base--;
   }
 
-  if (upDown == 2 && base < 16) {
+  if (upDown == 2) {
     base++;
+  }
+
+  if (base < 2) {
+    base = 16;
+  }
+
+  if (base > 16) {
+    base = 2;
   }
 
 }
@@ -530,26 +538,61 @@ void changeSetTime(int upDown) {
    */
 
   if (upDown == 0) {
-    if (currentRow == 2 && setHour > 0) {
-      setHour--;
+    
+    if (currentRow == 2) {
+      
+      if (setHour > 0) {
+        setHour--;
+      }
+      else {
+        setHour = 23;
+      }
+      
     }
-    if (currentRow == 1 && setMinute > 0) {
-      setMinute--;
+    
+    if (currentRow == 1) {
+      
+      if (setMinute > 0) {
+        setMinute--;
+      }
+      else {
+        setMinute = 59;
+      }
+      
     }
-    if (currentRow == 0 && setSecond > 0) {
-      setSecond--;
+    
+    if (currentRow == 0) {
+      
+      if (setSecond > 0) {
+        setSecond--;
+      }
+      else {
+        setSecond = 59;
+      }
+      
     }
+    
   }
 
   if (upDown == 2) {
-    if (currentRow == 2 && setHour < 24) {
+    if (currentRow == 2) {
       setHour++;
     }
-    if (currentRow == 1 && setMinute < 60) {
+    if (currentRow == 1) {
       setMinute++;
     }
-    if (currentRow == 0 && setSecond < 60) {
+    if (currentRow == 0) {
       setSecond++;
+    }
+
+    if (setHour == 24) {
+      setHour = 0;
+    }
+    if (setMinute == 60) {
+      setMinute = 0;
+    }
+    if (setSecond == 60) {
+      setSecond = 0;
     }
   }
 
