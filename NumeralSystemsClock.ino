@@ -352,7 +352,7 @@ void displayTest(int blinkDelay) {
 
 }
 
-void binary(int number, int row, int firstDigit) {
+/* void binary(int number, int row, int firstDigit) { */
 
   /* (number & 1<<i) gives 0 or number,
    * ! negates => 1 or 0), but need 1 for true => !!(number & i<<i).
@@ -367,11 +367,11 @@ void binary(int number, int row, int firstDigit) {
    *    }
    *  } */
 
-  for (int i = 0; i < DIGITS[row] - firstDigit; i++) {
+/*  for (int i = 0; i < DIGITS[row] - firstDigit; i++) {
     lc.setDigit(row, firstDigit + i, !!(number & 1<<i), false);
   }
 
-}
+} */
 
 void printClock(uint8_t bottom, uint8_t middle, uint8_t top) {
 
