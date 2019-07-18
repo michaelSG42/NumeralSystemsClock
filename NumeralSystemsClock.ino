@@ -64,6 +64,9 @@ void setup() {
 
   //Serial.begin(9600);
 
+  /* Get settings from RTC RAM */
+  readSettings();
+
   /* Start and setup displays. */
   for (int i = 0; i < DRIVERS; i++) {
     /* Wake up: */
@@ -491,10 +494,12 @@ void changeBright(int upDown) {
 
   if (upDown == 0 && brightness > 0) {
     brightness--;
+    writeSettings();
   }
 
   if (upDown == 2 && brightness < 15) {
     brightness++;
+    writeSettings();
   }
 
 }
@@ -528,6 +533,8 @@ void changeBase(int upDown) {
   if (base > 16) {
     base = 2;
   }
+
+  writeSettings();
 
 }
 
@@ -637,6 +644,28 @@ void writeRTC() {
   Wire.write(bSecond);
   Wire.write(bMinute);
   Wire.write(bHour);
+  Wire.endTransmission();
+
+}
+
+void readSettings() {
+
+  Wire.beginTransmission(DS1307_I2C);
+  Wire.write((byte)0x08);
+  Wire.endTransmission();
+
+  Wire.requestFrom(DS1307_I2C, 2);
+  base = int(Wire.read());
+  brightness = int(Wire.read());
+
+}
+
+void writeSettings() {
+
+  Wire.beginTransmission(DS1307_I2C);
+  Wire.write((byte)0x08);
+  Wire.write(byte(base));
+  Wire.write(byte(brightness));
   Wire.endTransmission();
 
 }
